@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Kicked the Bucket! — A Deadly Funny Party Game</title>
+<style>
+  :root {
+    --ink: #1e1b18;
+    --paper: #f6f1e7;
+    --paper-dark: #ece4d4;
+    --gold: #c9a227;
+    --gold-dark: #a8861c;
+    --red: #b23a2f;
+    --green: #3e7d4f;
+    --who: #4a6fa5;
+    --how: #b23a2f;
+    --shadow: 0 6px 0 rgba(30,27,24,.85);
+  }
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html, body { height:100%; }
+  body {
+    font-family: Georgia, 'Times New Roman', serif;
+    background: var(--ink);
+    color: var(--ink);
+    display:flex; justify-content:center;
+    overscroll-behavior:none;
+  }
+  #app {
+    width:100%; max-width:480px; min-height:100dvh;
+    background: var(--paper);
+    background-image: radial-gradient(circle at 50% 0%, #fffdf5 0%, var(--paper) 60%);
+    display:flex; flex-direction:column;
+    /* extra bottom padding keeps buttons clear of host banners (e.g. tiiny.host free tier) */
+    padding: max(16px, env(safe-area-inset-top)) 20px calc(max(20px, env(safe-area-inset-bottom)) + 120px);
+    position:relative; overflow:hidden;
+  }
+  .screen { display:none; flex-direction:column; flex:1; animation: fadeIn .3s ease; }
+  .screen.active { display:flex; }
+  @keyframes fadeIn { from {opacity:0; transform:translateY(8px);} to {opacity:1; transform:none;} }
+
+  /* ---------- shared ---------- */
+  h1.logo {
+    font-size: clamp(38px, 11vw, 52px);
+    text-align:center; line-height:1.02; letter-spacing:-1px;
+    margin-top: 8vh;
+  }
+  h1.logo .bucket { display:block; font-style:italic; color:var(--red); }
+  .tagline { text-align:center; font-style:italic; opacity:.7; margin-top:10px; font-size:17px; }
+  .rip-line { display:flex; align-items:center; gap:10px; margin:22px 0; opacity:.5; }
+  .rip-line::before, .rip-line::after { content:""; flex:1; border-top:2px solid var(--ink); }
+  .rip-line span { font-size:13px; letter-spacing:3px; }
+
+  .btn {
+    font-family: inherit; font-size:19px; font-weight:bold;
+    padding: 16px 20px; width:100%;
+    border: 3px solid var(--ink); border-radius: 14px;
+    background: var(--gold); color: var(--ink);
+    box-shadow: var(--shadow);
+    cursor:pointer; transition: transform .06s ease, box-shadow .06s ease;
+    touch-action: manipulation;
+  }
+  .btn:active { transform: translateY(4px); box-shadow: 0 2px 0 rgba(30,27,24,.85); }
+  .btn.secondary { background: var(--paper-dark); }
+  .btn.danger { background: var(--red); color: #fff; }
+  .btn.good { background: var(--green); color:#fff; }
+  .btn.ghost { background:transparent; border:none; box-shadow:none; font-size:15px; text-decoration:underline; opacity:.65; padding:10px; }
+  .btn + .btn { margin-top: 12px; }
+  .stack-bottom { margin-top:auto; padding-top:20px; }
+
+  label.field-label { font-size:13px; letter-spacing:2px; text-transform:uppercase; opacity:.6; display:block; margin:18px 0 8px; }
+  .choice-row { display:flex; gap:8px; }
+  .choice-row button {
+    flex:1; font-family:inherit; font-size:17px; font-weight:bold; padding:12px 4px;
+    border:3px solid var(--ink); border-radius:12px; background:var(--paper-dark); cursor:pointer;
+  }
+  .choice-row button.selected { background: var(--ink); color: var(--gold); }
+
+  /* ---------- turn / play ---------- */
+  .team-banner { text-align:center; margin-top:5vh; }
+  .team-banner .up-next { font-size:13px; letter-spacing:3px; text-transform:uppercase; opacity:.6; }
+  .team-banner .team-name { font-size:clamp(32px,9vw,42px); font-weight:bold; margin-top:6px; }
+  .scorebar { display:flex; justify-content:center; gap:14px; flex-wrap:wrap; margin-top:18px; }
+  .scorebar .chip {
+    background: var(--paper-dark); border:2px solid var(--ink); border-radius:999px;
+    padding:6px 14px; font-size:15px;
+  }
+  .scorebar .chip.current { background: var(--ink); color: var(--gold); }
+
+  .card {
+    background:#fffdf6; border:3px solid var(--ink); border-radius:18px;
+    box-shadow: var(--shadow); padding:22px 20px; margin-top:20px;
+  }
+  .card .card-label {
+    display:inline-block; font-size:12px; letter-spacing:3px; font-weight:bold;
+    color:#fff; padding:4px 12px; border-radius:999px; margin-bottom:10px;
+  }
+  .card.who .card-label { background: var(--who); }
+  .card.how .card-label { background: var(--how); }
+  .card .card-text { font-size:clamp(21px,6vw,26px); line-height:1.3; }
+  .card .card-text u { text-decoration-color: var(--gold-dark); text-decoration-thickness:3px; text-underline-offset:4px; }
+  .guess-hint { text-align:center; font-size:14px; opacity:.6; margin-top:16px; font-style:italic; }
+
+  #timer-display {
+    font-size:clamp(64px,22vw,96px); font-weight:bold; text-align:center;
+    font-variant-numeric: tabular-nums; margin-top:2vh; line-height:1;
+  }
+  #timer-display.low { color: var(--red); animation: pulse .5s infinite alternate; }
+  @keyframes pulse { from {transform:scale(1);} to {transform:scale(1.06);} }
+  #timer-bar-wrap { height:12px; border:2px solid var(--ink); border-radius:999px; overflow:hidden; margin-top:14px; background:var(--paper-dark); }
+  #timer-bar { height:100%; width:100%; background:var(--green); transition: width 1s linear, background .5s; }
+
+  .secret-note { text-align:center; margin-top:4vh; font-size:18px; line-height:1.5; }
+  .secret-note b { color: var(--red); }
+
+  .score-buttons { margin-top:auto; padding-top:20px; }
+  .score-buttons .hint { text-align:center; font-size:14px; opacity:.6; margin-bottom:12px; }
+
+  /* ---------- win ---------- */
+  .tombstone {
+    margin: 6vh auto 0; width: 240px; padding: 40px 18px 26px; text-align: center;
+    background: linear-gradient(#d9d4c8, #b8b2a4);
+    border: 3px solid var(--ink);
+    border-radius: 120px 120px 8px 8px;
+    box-shadow: var(--shadow);
+  }
+  .tombstone .rip { font-size:34px; letter-spacing:6px; font-weight:bold; }
+  .tombstone .winner-name { font-size:24px; font-weight:bold; margin-top:10px; word-wrap:break-word; }
+  .tombstone .epitaph { font-style:italic; font-size:14px; margin-top:10px; opacity:.75; }
+
+  .confetti { position:absolute; top:-20px; font-size:22px; animation: fall linear forwards; z-index:5; pointer-events:none; }
+  @keyframes fall { to { transform: translateY(110vh) rotate(720deg); opacity:.4; } }
+
+  .flower { text-align:center; font-size:34px; margin-top:14px; }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- HOME -->
+  <div class="screen active" id="screen-home">
+    <h1 class="logo">KICKED THE<span class="bucket">BUCKET!</span></h1>
+    <p class="tagline">The deadly funny acting game.<br>Draw a demise. Act it out. No talking!</p>
+    <div class="rip-line"><span>✦ R.I.P. ✦</span></div>
+    <div class="stack-bottom">
+      <button type="button" class="btn" data-action="goto" data-target="screen-setup">New Game</button>
+      <button type="button" class="btn ghost" data-action="goto" data-target="screen-rules">How to play</button>
+    </div>
+  </div>
+
+  <!-- RULES -->
+  <div class="screen" id="screen-rules">
+    <h2 style="font-size:30px; margin-top:20px;">How to Play</h2>
+    <div class="card" style="margin-top:16px;">
+      <div class="card-text" style="font-size:17px; line-height:1.6;">
+        1. Split into teams and pass this phone around.<br><br>
+        2. On your turn, one player secretly peeks at a <b style="color:var(--who)">WHO</b> card and a <b style="color:var(--how)">HOW</b> card — a character and their ridiculous demise.<br><br>
+        3. Act it out! <b>No talking, no sounds, no pointing at objects.</b><br><br>
+        4. Your team must guess the <u>underlined words</u> before the clock runs out. Each card guessed = 1 point.<br><br>
+        5. First team to the target score wins the funeral… er, game. 🪦
+      </div>
+    </div>
+    <div class="stack-bottom">
+      <button type="button" class="btn secondary" data-action="goto" data-target="screen-home">Back</button>
+    </div>
+  </div>
+
+  <!-- SETUP -->
+  <div class="screen" id="screen-setup">
+    <h2 style="font-size:30px; margin-top:20px;">Funeral Arrangements</h2>
+
+    <label class="field-label">Teams</label>
+    <div class="choice-row" id="team-count-row"></div>
+
+    <label class="field-label">Round length</label>
+    <div class="choice-row" id="time-row"></div>
+
+    <label class="field-label">Points to win</label>
+    <div class="choice-row" id="target-row"></div>
+
+    <div class="stack-bottom">
+      <button type="button" class="btn" data-action="start-game">Let the Dying Begin</button>
+      <button type="button" class="btn ghost" data-action="goto" data-target="screen-home">Back</button>
+    </div>
+  </div>
+
+  <!-- TURN INTRO -->
+  <div class="screen" id="screen-turn">
+    <div class="team-banner">
+      <div class="up-next">Now performing</div>
+      <div class="team-name" id="turn-team-name"></div>
+    </div>
+    <div class="scorebar" id="turn-scorebar"></div>
+    <p class="secret-note">Pick your actor and hand them the phone.<br><b>Only the actor</b> may see the next screen!</p>
+    <div class="stack-bottom">
+      <button type="button" class="btn" data-action="reveal">🤫 I'm the actor — show my cards</button>
+    </div>
+  </div>
+
+  <!-- CARD REVEAL (actor only) -->
+  <div class="screen" id="screen-cards">
+    <p style="text-align:center; font-size:13px; letter-spacing:3px; text-transform:uppercase; opacity:.6; margin-top:10px;">For the actor's eyes only</p>
+    <div class="card who">
+      <span class="card-label">WHO</span>
+      <div class="card-text" id="who-text"></div>
+    </div>
+    <div class="card how">
+      <span class="card-label">HOW THEY WENT</span>
+      <div class="card-text" id="how-text"></div>
+    </div>
+    <p class="guess-hint">Your team must guess the <u>underlined words</u>. One point per card!</p>
+    <div class="stack-bottom">
+      <button type="button" class="btn danger" data-action="start-acting">🎬 Start the Timer</button>
+      <button type="button" class="btn ghost" data-action="redraw">Too hard — redraw (once)</button>
+    </div>
+  </div>
+
+  <!-- ACTING / TIMER -->
+  <div class="screen" id="screen-acting">
+    <div class="team-banner" style="margin-top:2vh;">
+      <div class="up-next" id="acting-team-label"></div>
+    </div>
+    <div id="timer-display">60</div>
+    <div id="timer-bar-wrap"><div id="timer-bar"></div></div>
+    <p class="secret-note" style="font-size:15px; opacity:.7;">Act! No talking, no sounds!</p>
+    <div class="score-buttons">
+      <div class="hint">When time's up (or they nail it early) — score it:</div>
+      <button type="button" class="btn good" data-action="score" data-points="2">☠️ Got BOTH cards (+2)</button>
+      <button type="button" class="btn" data-action="score" data-points="1">Got one card (+1)</button>
+      <button type="button" class="btn secondary" data-action="score" data-points="0">Total flop (0)</button>
+    </div>
+  </div>
+
+  <!-- WIN -->
+  <div class="screen" id="screen-win">
+    <div class="tombstone">
+      <div class="rip">R.I.P.</div>
+      <div class="winner-name" id="winner-name"></div>
+      <div class="epitaph">“They died doing what they loved:<br>winning.”</div>
+    </div>
+    <div class="flower">🌹 🕯️ 🌹</div>
+    <div class="scorebar" id="final-scorebar" style="margin-top:20px;"></div>
+    <div class="stack-bottom">
+      <button type="button" class="btn" data-action="rematch">Rematch</button>
+      <button type="button" class="btn secondary" data-action="goto" data-target="screen-home">Main Menu</button>
+    </div>
+  </div>
+
+</div>
+
+<script>
+/* ============ CARD DECKS (original content) ============ */
+const WHO_CARDS = [
+  "A <u>ballerina</u> with the hiccups",
+  "A very sleepy <u>lifeguard</u>",
+  "An overconfident <u>magician</u>",
+  "A <u>cowboy</u> who's afraid of horses",
+  "A <u>mime</u> stuck in a real box",
+  "A <u>pirate</u> with terrible balance",
+  "An <u>opera singer</u> mid-high-note",
+  "A <u>ninja</u> who forgot how to sneak",
+  "A <u>grandma</u> with a black belt",
+  "A <u>robot</u> learning to dance",
+  "An <u>astronaut</u> who's homesick",
+  "A <u>chef</u> who hates vegetables",
+  "A <u>vampire</u> scared of the dark",
+  "A <u>superhero</u> whose cape is too long",
+  "A <u>dentist</u> with a sweet tooth",
+  "A <u>weatherman</u> caught in the rain",
+  "A <u>knight</u> in squeaky armor",
+  "A <u>clown</u> late for the circus",
+  "A <u>zombie</u> doing yoga",
+  "A <u>librarian</u> who can't whisper",
+  "A <u>plumber</u> with slippery hands",
+  "A <u>bee keeper</u> allergic to bees",
+  "A <u>rock star</u> with stage fright",
+  "A <u>detective</u> who lost his own keys",
+  "A <u>tightrope walker</u> with the sniffles",
+  "A <u>wizard</u> who mixed up his spells",
+  "A <u>race car driver</u> stuck in reverse",
+  "A <u>farmer</u> chased by his chickens",
+  "A <u>snowman</u> on summer vacation",
+  "A <u>teacher</u> on the last day of school",
+  "A <u>dog walker</u> with forty dogs",
+  "A <u>barber</u> with the shakes",
+  "A <u>gym coach</u> who skipped leg day",
+  "A <u>fisherman</u> afraid of water",
+  "A <u>king</u> whose crown is too heavy",
+  "A <u>baby</u> with a genius IQ",
+  "A <u>ghost</u> afraid of people",
+  "A <u>juggler</u> with buttered fingers",
+  "A <u>mail carrier</u> chased by a poodle",
+  "A <u>surfer</u> who can't swim",
+];
+
+const HOW_CARDS = [
+  "tickled to death by a <u>feather duster</u>",
+  "flattened by a runaway <u>cheese wheel</u>",
+  "sneezed so hard they <u>launched into orbit</u>",
+  "hugged too tight by a <u>bear</u>",
+  "slipped on a <u>banana peel</u>… at a banana convention",
+  "buried under an avalanche of <u>teddy bears</u>",
+  "laughed so hard at their own <u>joke</u> they popped",
+  "sucked into a giant <u>vacuum cleaner</u>",
+  "danced the <u>macarena</u> until they dropped",
+  "swallowed whole by a <u>giant clam</u>",
+  "trampled by a stampede of <u>turtles</u> (it took a while)",
+  "buttered a floor and forgot, then <u>slipped</u>",
+  "carried away by ten thousand <u>balloons</u>",
+  "ate the world's spiciest <u>pepper</u> and evaporated",
+  "yawned so wide they <u>swallowed themselves</u>",
+  "stung by a very polite <u>jellyfish</u>",
+  "spun too fast in an <u>office chair</u>",
+  "crushed by a falling <u>piano</u> from the sky",
+  "took a selfie with an angry <u>ostrich</u>",
+  "hiccupped themselves off a <u>cliff</u>",
+  "froze solid licking a <u>flagpole</u> in winter",
+  "chased their <u>hat</u> into a windmill",
+  "petted a <u>porcupine</u> in the wrong direction",
+  "drowned in a pool of <u>pudding</u>",
+  "got wrapped up like a mummy in <u>toilet paper</u>",
+  "karate-chopped a <u>brick</u> that chopped back",
+  "rode a <u>shopping cart</u> down a mountain",
+  "tried to high-five a <u>cactus</u>",
+  "over-inflated a <u>bouncy castle</u> while inside it",
+  "got catapulted by a <u>seesaw</u> and never landed",
+  "smelled a flower that was secretly a <u>bee hotel</u>",
+  "tripped over their own <u>shadow</u>",
+  "played tug-of-war with an <u>elephant</u>",
+  "got stuck doing the <u>splits</u> forever",
+  "microwaved a <u>burrito</u> that exploded",
+  "waved at a <u>train</u> from too close",
+  "did one push-up and their <u>arms</u> gave out — forever",
+  "bitten by their own <u>reflection</u>",
+  "juggled <u>watermelons</u> during an earthquake",
+  "was serenaded to sleep by <u>whales</u> and never woke up",
+];
+
+/* ============ STATE ============ */
+const state = {
+  teamCount: 2, roundTime: 60, target: 10,
+  teams: [], scores: [], currentTeam: 0,
+  whoDeck: [], howDeck: [],
+  currentWho: null, currentHow: null,
+  redrawUsed: false,
+  timerId: null, timeLeft: 0,
+};
+
+const TEAM_NAMES = ["Team Skeleton", "Team Ghost", "Team Zombie", "Team Mummy", "Team Vampire"];
+
+/* ============ SETUP UI ============ */
+function buildChoiceRow(el, options, current, setter) {
+  el.innerHTML = "";
+  options.forEach(opt => {
+    const b = document.createElement("button");
+    b.textContent = opt.label;
+    if (opt.value === current) b.classList.add("selected");
+    b.onclick = () => { setter(opt.value); buildChoiceRow(el, options, opt.value, setter); };
+    el.appendChild(b);
+  });
+}
+function initSetup() {
+  buildChoiceRow(document.getElementById("team-count-row"),
+    [{label:"2",value:2},{label:"3",value:3},{label:"4",value:4}],
+    state.teamCount, v => state.teamCount = v);
+  buildChoiceRow(document.getElementById("time-row"),
+    [{label:"45s",value:45},{label:"60s",value:60},{label:"90s",value:90}],
+    state.roundTime, v => state.roundTime = v);
+  buildChoiceRow(document.getElementById("target-row"),
+    [{label:"5",value:5},{label:"10",value:10},{label:"15",value:15}],
+    state.target, v => state.target = v);
+}
+
+/* ============ GAME FLOW ============ */
+function goto(id) {
+  document.querySelectorAll(".screen").forEach(s => s.classList.remove("active"));
+  document.getElementById(id).classList.add("active");
+}
+
+function shuffle(arr) {
+  const a = arr.slice();
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+function startGame() {
+  state.teams = TEAM_NAMES.slice(0, state.teamCount);
+  state.scores = new Array(state.teamCount).fill(0);
+  state.currentTeam = 0;
+  state.whoDeck = shuffle(WHO_CARDS);
+  state.howDeck = shuffle(HOW_CARDS);
+  showTurn();
+}
+
+function restartSameTeams() {
+  state.scores = new Array(state.teamCount).fill(0);
+  state.currentTeam = 0;
+  state.whoDeck = shuffle(WHO_CARDS);
+  state.howDeck = shuffle(HOW_CARDS);
+  showTurn();
+}
+
+function renderScorebar(el, highlightCurrent) {
+  el.innerHTML = "";
+  state.teams.forEach((t, i) => {
+    const chip = document.createElement("span");
+    chip.className = "chip" + (highlightCurrent && i === state.currentTeam ? " current" : "");
+    chip.textContent = `${t.replace("Team ","")} · ${state.scores[i]}`;
+    el.appendChild(chip);
+  });
+}
+
+function showTurn() {
+  document.getElementById("turn-team-name").textContent = state.teams[state.currentTeam];
+  renderScorebar(document.getElementById("turn-scorebar"), true);
+  goto("screen-turn");
+}
+
+function drawCards() {
+  if (state.whoDeck.length === 0) state.whoDeck = shuffle(WHO_CARDS);
+  if (state.howDeck.length === 0) state.howDeck = shuffle(HOW_CARDS);
+  state.currentWho = state.whoDeck.pop();
+  state.currentHow = state.howDeck.pop();
+  document.getElementById("who-text").innerHTML = state.currentWho;
+  document.getElementById("how-text").innerHTML = "…" + state.currentHow;
+}
+
+function redrawBtn() { return document.querySelector("#screen-cards .btn.ghost"); }
+
+function revealCards() {
+  state.redrawUsed = false;
+  const rb = redrawBtn();
+  rb.textContent = "Too hard — redraw (once)";
+  rb.style.opacity = "";
+  drawCards();
+  goto("screen-cards");
+}
+
+function redraw() {
+  if (state.redrawUsed) return;
+  state.redrawUsed = true;
+  drawCards();
+  const rb = redrawBtn();
+  rb.textContent = "Redraw used!";
+  rb.style.opacity = ".35";
+}
+
+function startActing() {
+  document.getElementById("acting-team-label").textContent = state.teams[state.currentTeam] + " — GO!";
+  state.timeLeft = state.roundTime;
+  updateTimerUI();
+  goto("screen-acting");
+  clearInterval(state.timerId);
+  state.timerId = setInterval(tick, 1000);
+}
+
+function tick() {
+  state.timeLeft--;
+  if (state.timeLeft <= 0) {
+    state.timeLeft = 0;
+    clearInterval(state.timerId);
+    try { navigator.vibrate && navigator.vibrate([200,100,200]); } catch(e){}
+  }
+  updateTimerUI();
+}
+
+function updateTimerUI() {
+  const d = document.getElementById("timer-display");
+  d.textContent = state.timeLeft;
+  d.classList.toggle("low", state.timeLeft <= 10);
+  const pct = (state.timeLeft / state.roundTime) * 100;
+  const bar = document.getElementById("timer-bar");
+  bar.style.width = pct + "%";
+  bar.style.background = state.timeLeft <= 10 ? "var(--red)" : state.timeLeft <= state.roundTime/2 ? "var(--gold)" : "var(--green)";
+}
+
+function scoreTurn(points) {
+  clearInterval(state.timerId);
+  state.scores[state.currentTeam] += points;
+  if (state.scores[state.currentTeam] >= state.target) {
+    showWin();
+    return;
+  }
+  state.currentTeam = (state.currentTeam + 1) % state.teamCount;
+  showTurn();
+}
+
+function showWin() {
+  document.getElementById("winner-name").textContent = state.teams[state.currentTeam];
+  renderScorebar(document.getElementById("final-scorebar"), false);
+  goto("screen-win");
+  throwConfetti();
+}
+
+function throwConfetti() {
+  const app = document.getElementById("app");
+  const bits = ["🪦","💀","🌹","⚰️","✨","🎉","🕯️"];
+  for (let i = 0; i < 40; i++) {
+    const s = document.createElement("span");
+    s.className = "confetti";
+    s.textContent = bits[Math.floor(Math.random() * bits.length)];
+    s.style.left = Math.random() * 95 + "%";
+    s.style.animationDuration = (2 + Math.random() * 3) + "s";
+    s.style.animationDelay = (Math.random() * 1.5) + "s";
+    app.appendChild(s);
+    setTimeout(() => s.remove(), 7000);
+  }
+}
+
+/* ============ EVENT DELEGATION (works even where inline onclick is blocked) ============ */
+const ACTIONS = {
+  "goto": btn => goto(btn.dataset.target),
+  "start-game": () => startGame(),
+  "reveal": () => revealCards(),
+  "start-acting": () => startActing(),
+  "redraw": () => redraw(),
+  "score": btn => scoreTurn(parseInt(btn.dataset.points, 10)),
+  "rematch": () => restartSameTeams(),
+};
+document.addEventListener("click", e => {
+  const btn = e.target.closest("[data-action]");
+  if (!btn) return;
+  e.preventDefault();
+  const fn = ACTIONS[btn.dataset.action];
+  if (fn) fn(btn);
+}, { passive: false });
+
+initSetup();
+</script>
+</body>
+</html>

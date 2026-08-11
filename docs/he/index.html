@@ -149,10 +149,40 @@
   @keyframes fall { to { transform: translateY(110vh) rotate(720deg); opacity:.4; } }
 
   .flower { text-align:center; font-size:34px; margin-top:14px; }
+
+  /* ---------- הפסקה ---------- */
+  #pause-btn {
+    position:absolute; z-index:15; display:none;
+    top: calc(max(16px, env(safe-area-inset-top)) + 2px);
+    inset-inline-end: 16px;   /* נצמד לפינה הנכונה גם ב-RTL */
+    width:44px; height:44px; padding:0;
+    border:3px solid var(--ink); border-radius:50%;
+    background: var(--paper-dark); color: var(--ink);
+    font-family:inherit; font-size:15px; font-weight:bold; line-height:1;
+    cursor:pointer; touch-action:manipulation;
+  }
+  #pause-btn.show { display:block; }
+  #pause-btn:active { transform: scale(.94); }
+
+  #pause-overlay {
+    position:fixed; inset:0; z-index:20; padding:24px;
+    background: rgba(30,27,24,.85);
+    display:none; align-items:center; justify-content:center;
+  }
+  #pause-overlay.open { display:flex; }
+  .pause-panel {
+    width:100%; max-width:330px; text-align:center;
+    background: var(--paper); border:3px solid var(--ink); border-radius:18px;
+    box-shadow: var(--shadow); padding:26px 20px 22px;
+  }
+  .pause-panel h3 { font-size:28px; }
+  .pause-panel p { font-size:15px; opacity:.7; line-height:1.5; margin:8px 0 20px; }
 </style>
 </head>
 <body>
 <div id="app">
+
+  <button type="button" id="pause-btn" data-action="pause" aria-label="השהיה">❚❚</button>
 
   <!-- בית -->
   <div class="screen active" id="screen-home">
@@ -267,6 +297,23 @@
 
 </div>
 
+<!-- הפסקה -->
+<div id="pause-overlay">
+  <div class="pause-panel" id="pause-main">
+    <h3>הפסקה</h3>
+    <p>המתים יכולים לחכות.</p>
+    <button type="button" class="btn good" data-action="resume">חזרה למשחק</button>
+    <button type="button" class="btn secondary" data-action="ask-restart">להתחיל מחדש</button>
+    <button type="button" class="btn secondary" data-action="ask-quit">יציאה לתפריט</button>
+  </div>
+  <div class="pause-panel" id="pause-confirm" style="display:none;">
+    <h3 id="confirm-title"></h3>
+    <p id="confirm-text"></p>
+    <button type="button" class="btn danger" data-action="confirm-yes" id="confirm-yes"></button>
+    <button type="button" class="btn secondary" data-action="confirm-no">ביטול</button>
+  </div>
+</div>
+
 <script>
 /* ============ חפיסות (תוכן מקורי, גרסה למבוגרים) ============ */
 const WHO_CARDS = [
@@ -374,6 +421,8 @@ const state = {
   currentWho: null, currentHow: null,
   redrawUsed: false,
   timerId: null, timeLeft: 0,
+  timerRunning: false,   // האם שעון הסיבוב באמת רץ כרגע
+  resumeTimer: false,    // האם הוא רץ כשנפתחה ההפסקה
 };
 
 const TEAM_NAMES = ["קבוצת השלד", "קבוצת הרוח", "קבוצת הזומבי", "קבוצת המומיה", "קבוצת הערפד"];
@@ -403,9 +452,12 @@ function initSetup() {
 }
 
 /* ============ מהלך המשחק ============ */
+const GAMEPLAY_SCREENS = ["screen-turn", "screen-cards", "screen-acting"];
+
 function goto(id) {
   document.querySelectorAll(".screen").forEach(s => s.classList.remove("active"));
   document.getElementById(id).classList.add("active");
+  document.getElementById("pause-btn").classList.toggle("show", GAMEPLAY_SCREENS.indexOf(id) !== -1);
 }
 
 function shuffle(arr) {
@@ -484,15 +536,22 @@ function startActing() {
   state.timeLeft = state.roundTime;
   updateTimerUI();
   goto("screen-acting");
-  clearInterval(state.timerId);
+  stopTimer();
   state.timerId = setInterval(tick, 1000);
+  state.timerRunning = true;
+}
+
+function stopTimer() {
+  clearInterval(state.timerId);
+  state.timerId = null;
+  state.timerRunning = false;
 }
 
 function tick() {
   state.timeLeft--;
   if (state.timeLeft <= 0) {
     state.timeLeft = 0;
-    clearInterval(state.timerId);
+    stopTimer();
     try { navigator.vibrate && navigator.vibrate([200,100,200]); } catch(e){}
   }
   updateTimerUI();
@@ -509,7 +568,7 @@ function updateTimerUI() {
 }
 
 function scoreTurn(points) {
-  clearInterval(state.timerId);
+  stopTimer();
   state.scores[state.currentTeam] += points;
   if (state.scores[state.currentTeam] >= state.target) {
     showWin();
@@ -541,9 +600,78 @@ function throwConfetti() {
   }
 }
 
+/* ============ תפריט הפסקה ============ */
+const overlay = () => document.getElementById("pause-overlay");
+let pendingAction = null;
+
+const CONFIRM_COPY = {
+  restart: { title: "להתחיל מחדש?", text: "הניקוד יתאפס. אותן קבוצות, אותן הגדרות.", yes: "כן, מחדש" },
+  quit:    { title: "לצאת לתפריט?", text: "המשחק הנוכחי ייקבר סופית.",              yes: "כן, לצאת" },
+};
+
+function showPauseMain() {
+  pendingAction = null;
+  document.getElementById("pause-main").style.display = "";
+  document.getElementById("pause-confirm").style.display = "none";
+}
+
+function openPause() {
+  if (overlay().classList.contains("open")) return;
+  // מקפיאים את השעון וזוכרים אם הוא בכלל רץ, כדי שאפשר יהיה להחזיר אותו
+  state.resumeTimer = state.timerRunning;
+  stopTimer();
+  showPauseMain();
+  overlay().classList.add("open");
+}
+
+function closePause() {
+  overlay().classList.remove("open");
+  if (state.resumeTimer) {
+    state.resumeTimer = false;
+    state.timerId = setInterval(tick, 1000);
+    state.timerRunning = true;
+  }
+}
+
+function askConfirm(kind) {
+  pendingAction = kind;
+  const copy = CONFIRM_COPY[kind];
+  document.getElementById("confirm-title").textContent = copy.title;
+  document.getElementById("confirm-text").textContent = copy.text;
+  document.getElementById("confirm-yes").textContent = copy.yes;
+  document.getElementById("pause-main").style.display = "none";
+  document.getElementById("pause-confirm").style.display = "";
+}
+
+function confirmPause() {
+  const kind = pendingAction;
+  state.resumeTimer = false;
+  stopTimer();
+  overlay().classList.remove("open");
+  showPauseMain();
+  if (kind === "restart") restartSameTeams();
+  else if (kind === "quit") goto("screen-home");
+}
+
+/* נגיעה ברקע הכהה מחזירה למשחק, וגם Esc */
+document.getElementById("pause-overlay").addEventListener("click", e => {
+  if (e.target === e.currentTarget) closePause();
+});
+document.addEventListener("keydown", e => {
+  if (e.key !== "Escape") return;
+  if (overlay().classList.contains("open")) closePause();
+  else if (document.getElementById("pause-btn").classList.contains("show")) openPause();
+});
+
 /* ============ האזנה ללחיצות ============ */
 const ACTIONS = {
   "goto": btn => goto(btn.dataset.target),
+  "pause": () => openPause(),
+  "resume": () => closePause(),
+  "ask-restart": () => askConfirm("restart"),
+  "ask-quit": () => askConfirm("quit"),
+  "confirm-yes": () => confirmPause(),
+  "confirm-no": () => showPauseMain(),
   "start-game": () => startGame(),
   "reveal": () => revealCards(),
   "start-acting": () => startActing(),

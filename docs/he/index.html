@@ -1,0 +1,565 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>הלך לעולמו! — משחק החיקויים הקטלני</title>
+<meta name="description" content="משחק מסיבות למבוגרים. שולפים מיתה מטופשת, מחקים אותה, בלי מילה. נפתח ישר בדפדפן — בלי הורדות.">
+<meta name="theme-color" content="#1e1b18">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="הלך לעולמו!">
+<meta property="og:type" content="website">
+<meta property="og:locale" content="he_IL">
+<meta property="og:title" content="הלך לעולמו! — משחק החיקויים הקטלני">
+<meta property="og:description" content="משחק מסיבות למבוגרים. שולפים מיתה מטופשת, מחקים אותה, בלי מילה. נפתח ישר בדפדפן — בלי הורדות.">
+<meta name="twitter:card" content="summary">
+<style>
+  :root {
+    --ink: #1e1b18;
+    --paper: #f6f1e7;
+    --paper-dark: #ece4d4;
+    --gold: #c9a227;
+    --gold-dark: #a8861c;
+    --red: #b23a2f;
+    --green: #3e7d4f;
+    --who: #4a6fa5;
+    --how: #b23a2f;
+    --shadow: 0 6px 0 rgba(30,27,24,.85);
+  }
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html, body { height:100%; }
+  body {
+    /* Hebrew-capable stack: iOS, Android and desktop all have at least one of these */
+    font-family: "Frank Ruhl Libre", "Noto Serif Hebrew", "David Libre", David,
+                 "Times New Roman", "Arial Hebrew", "Noto Sans Hebrew", serif;
+    background: var(--ink);
+    color: var(--ink);
+    display:flex; justify-content:center;
+    overscroll-behavior:none;
+  }
+  #app {
+    width:100%; max-width:480px; min-height:100dvh;
+    background: var(--paper);
+    background-image: radial-gradient(circle at 50% 0%, #fffdf5 0%, var(--paper) 60%);
+    display:flex; flex-direction:column;
+    padding: max(16px, env(safe-area-inset-top)) 20px calc(max(20px, env(safe-area-inset-bottom)) + 120px);
+    position:relative; overflow:hidden;
+  }
+  .screen { display:none; flex-direction:column; flex:1; animation: fadeIn .3s ease; }
+  .screen.active { display:flex; }
+  @keyframes fadeIn { from {opacity:0; transform:translateY(8px);} to {opacity:1; transform:none;} }
+
+  /* ---------- shared ---------- */
+  h1.logo {
+    font-size: clamp(38px, 11vw, 52px);
+    text-align:center; line-height:1.1;
+    margin-top: 7vh;
+  }
+  h1.logo .bucket { display:block; font-style:italic; color:var(--red); }
+  .tagline { text-align:center; font-style:italic; opacity:.7; margin-top:10px; font-size:17px; line-height:1.5; }
+  .age-badge {
+    display:block; width:max-content; margin:14px auto 0;
+    border:2px solid var(--ink); border-radius:999px;
+    padding:4px 14px; font-size:13px; letter-spacing:1px; opacity:.7;
+  }
+  .rip-line { display:flex; align-items:center; gap:10px; margin:22px 0; opacity:.5; }
+  .rip-line::before, .rip-line::after { content:""; flex:1; border-top:2px solid var(--ink); }
+  .rip-line span { font-size:13px; letter-spacing:1px; }
+
+  .btn {
+    font-family: inherit; font-size:19px; font-weight:bold;
+    padding: 16px 20px; width:100%;
+    border: 3px solid var(--ink); border-radius: 14px;
+    background: var(--gold); color: var(--ink);
+    box-shadow: var(--shadow);
+    cursor:pointer; transition: transform .06s ease, box-shadow .06s ease;
+    touch-action: manipulation;
+  }
+  .btn:active { transform: translateY(4px); box-shadow: 0 2px 0 rgba(30,27,24,.85); }
+  .btn.secondary { background: var(--paper-dark); }
+  .btn.danger { background: var(--red); color: #fff; }
+  .btn.good { background: var(--green); color:#fff; }
+  .btn.ghost { background:transparent; border:none; box-shadow:none; font-size:15px; text-decoration:underline; opacity:.65; padding:10px; }
+  .btn + .btn { margin-top: 12px; }
+  .stack-bottom { margin-top:auto; padding-top:20px; }
+
+  label.field-label { font-size:14px; letter-spacing:1px; opacity:.6; display:block; margin:18px 0 8px; }
+  .choice-row { display:flex; gap:8px; }
+  .choice-row button {
+    flex:1; font-family:inherit; font-size:17px; font-weight:bold; padding:12px 4px;
+    border:3px solid var(--ink); border-radius:12px; background:var(--paper-dark); cursor:pointer;
+  }
+  .choice-row button.selected { background: var(--ink); color: var(--gold); }
+
+  /* ---------- turn / play ---------- */
+  .team-banner { text-align:center; margin-top:5vh; }
+  .team-banner .up-next { font-size:14px; letter-spacing:1px; opacity:.6; }
+  .team-banner .team-name { font-size:clamp(32px,9vw,42px); font-weight:bold; margin-top:6px; }
+  .scorebar { display:flex; justify-content:center; gap:14px; flex-wrap:wrap; margin-top:18px; }
+  .scorebar .chip {
+    background: var(--paper-dark); border:2px solid var(--ink); border-radius:999px;
+    padding:6px 14px; font-size:15px;
+  }
+  .scorebar .chip.current { background: var(--ink); color: var(--gold); }
+
+  .card {
+    background:#fffdf6; border:3px solid var(--ink); border-radius:18px;
+    box-shadow: var(--shadow); padding:22px 20px; margin-top:20px;
+  }
+  .card .card-label {
+    display:inline-block; font-size:13px; letter-spacing:1px; font-weight:bold;
+    color:#fff; padding:4px 14px; border-radius:999px; margin-bottom:10px;
+  }
+  .card.who .card-label { background: var(--who); }
+  .card.how .card-label { background: var(--how); }
+  .card .card-text { font-size:clamp(21px,6vw,26px); line-height:1.4; }
+  .card .card-text u { text-decoration-color: var(--gold-dark); text-decoration-thickness:3px; text-underline-offset:4px; }
+  .guess-hint { text-align:center; font-size:14px; opacity:.6; margin-top:16px; font-style:italic; }
+
+  #timer-display {
+    font-size:clamp(64px,22vw,96px); font-weight:bold; text-align:center;
+    font-variant-numeric: tabular-nums; margin-top:2vh; line-height:1;
+    direction:ltr;
+  }
+  #timer-display.low { color: var(--red); animation: pulse .5s infinite alternate; }
+  @keyframes pulse { from {transform:scale(1);} to {transform:scale(1.06);} }
+  #timer-bar-wrap { height:12px; border:2px solid var(--ink); border-radius:999px; overflow:hidden; margin-top:14px; background:var(--paper-dark); }
+  #timer-bar { height:100%; width:100%; background:var(--green); transition: width 1s linear, background .5s; }
+
+  .secret-note { text-align:center; margin-top:4vh; font-size:18px; line-height:1.6; }
+  .secret-note b { color: var(--red); }
+
+  .score-buttons { margin-top:auto; padding-top:20px; }
+  .score-buttons .hint { text-align:center; font-size:14px; opacity:.6; margin-bottom:12px; }
+
+  /* ---------- win ---------- */
+  .tombstone {
+    margin: 6vh auto 0; width: 240px; padding: 40px 18px 26px; text-align: center;
+    background: linear-gradient(#d9d4c8, #b8b2a4);
+    border: 3px solid var(--ink);
+    border-radius: 120px 120px 8px 8px;
+    box-shadow: var(--shadow);
+  }
+  .tombstone .rip { font-size:30px; letter-spacing:2px; font-weight:bold; }
+  .tombstone .winner-name { font-size:24px; font-weight:bold; margin-top:10px; word-wrap:break-word; }
+  .tombstone .epitaph { font-style:italic; font-size:14px; margin-top:10px; opacity:.75; line-height:1.5; }
+
+  .confetti { position:absolute; top:-20px; font-size:22px; animation: fall linear forwards; z-index:5; pointer-events:none; }
+  @keyframes fall { to { transform: translateY(110vh) rotate(720deg); opacity:.4; } }
+
+  .flower { text-align:center; font-size:34px; margin-top:14px; }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- בית -->
+  <div class="screen active" id="screen-home">
+    <h1 class="logo">הלך<span class="bucket">לעולמו!</span></h1>
+    <p class="tagline">משחק החיקויים הקטלני.<br>שולפים מיתה מטופשת. מחקים אותה. בלי מילה!</p>
+    <span class="age-badge">לא למשפחה שמרנית · <bdi dir="ltr">18+</bdi></span>
+    <div class="rip-line"><span>✦ ת.נ.צ.ב.ה ✦</span></div>
+    <div class="stack-bottom">
+      <button type="button" class="btn" data-action="goto" data-target="screen-setup">משחק חדש</button>
+      <button type="button" class="btn ghost" data-action="goto" data-target="screen-rules">איך משחקים</button>
+    </div>
+  </div>
+
+  <!-- חוקים -->
+  <div class="screen" id="screen-rules">
+    <h2 style="font-size:30px; margin-top:20px;">איך משחקים</h2>
+    <div class="card" style="margin-top:16px;">
+      <div class="card-text" style="font-size:17px; line-height:1.7;">
+        1. מתחלקים לקבוצות ומעבירים את הטלפון ביניכם.<br><br>
+        2. בתור שלכם, שחקן אחד מציץ בסתר בקלף <b style="color:var(--who)">מי</b> ובקלף <b style="color:var(--how)">איך זה נגמר</b> — דמות והמיתה המפוקפקת שלה.<br><br>
+        3. עכשיו מחקים! <b>בלי לדבר, בלי קולות, בלי להצביע על חפצים.</b><br><br>
+        4. הקבוצה צריכה לנחש את <u>המילים המודגשות</u> לפני שנגמר הזמן. כל קלף שנוחש = נקודה.<br><br>
+        5. הקבוצה הראשונה שמגיעה לניקוד המטרה זוכה בלוויה… סליחה, במשחק. 🪦<br><br>
+        <b>אזהרה:</b> החפיסה הזאת מיועדת למבוגרים. יש בה שתייה, מבוכה, ומיתות שלא תרצו להסביר לילדים.
+      </div>
+    </div>
+    <div class="stack-bottom">
+      <button type="button" class="btn secondary" data-action="goto" data-target="screen-home">חזרה</button>
+    </div>
+  </div>
+
+  <!-- הגדרות -->
+  <div class="screen" id="screen-setup">
+    <h2 style="font-size:30px; margin-top:20px;">סידורי הלוויה</h2>
+
+    <label class="field-label">כמה קבוצות</label>
+    <div class="choice-row" id="team-count-row"></div>
+
+    <label class="field-label">אורך סיבוב</label>
+    <div class="choice-row" id="time-row"></div>
+
+    <label class="field-label">נקודות לניצחון</label>
+    <div class="choice-row" id="target-row"></div>
+
+    <div class="stack-bottom">
+      <button type="button" class="btn" data-action="start-game">שתתחיל הגסיסה</button>
+      <button type="button" class="btn ghost" data-action="goto" data-target="screen-home">חזרה</button>
+    </div>
+  </div>
+
+  <!-- פתיחת תור -->
+  <div class="screen" id="screen-turn">
+    <div class="team-banner">
+      <div class="up-next">עכשיו התור של</div>
+      <div class="team-name" id="turn-team-name"></div>
+    </div>
+    <div class="scorebar" id="turn-scorebar"></div>
+    <p class="secret-note">בחרו מי מחקה והעבירו לו את הטלפון.<br><b>רק המחקה</b> רואה את המסך הבא!</p>
+    <div class="stack-bottom">
+      <button type="button" class="btn" data-action="reveal">🤫 אני המחקה — תראו לי את הקלפים</button>
+    </div>
+  </div>
+
+  <!-- קלפים (למחקה בלבד) -->
+  <div class="screen" id="screen-cards">
+    <p style="text-align:center; font-size:14px; letter-spacing:1px; opacity:.6; margin-top:10px;">לעיני המחקה בלבד</p>
+    <div class="card who">
+      <span class="card-label">מי</span>
+      <div class="card-text" id="who-text"></div>
+    </div>
+    <div class="card how">
+      <span class="card-label">איך זה נגמר</span>
+      <div class="card-text" id="how-text"></div>
+    </div>
+    <p class="guess-hint">הקבוצה צריכה לנחש את <u>המילים המודגשות</u>. נקודה לכל קלף!</p>
+    <div class="stack-bottom">
+      <button type="button" class="btn danger" data-action="start-acting">🎬 להפעיל את הטיימר</button>
+      <button type="button" class="btn ghost" data-action="redraw">קשה מדי — קלפים חדשים (פעם אחת)</button>
+    </div>
+  </div>
+
+  <!-- חיקוי / טיימר -->
+  <div class="screen" id="screen-acting">
+    <div class="team-banner" style="margin-top:2vh;">
+      <div class="up-next" id="acting-team-label"></div>
+    </div>
+    <div id="timer-display">60</div>
+    <div id="timer-bar-wrap"><div id="timer-bar"></div></div>
+    <p class="secret-note" style="font-size:15px; opacity:.7;">מחקים! בלי לדבר, בלי קולות!</p>
+    <div class="score-buttons">
+      <div class="hint">כשנגמר הזמן (או שניחשו מוקדם) — תנו ניקוד:</div>
+      <button type="button" class="btn good" data-action="score" data-points="2">☠️ ניחשו את שני הקלפים — 2 נקודות</button>
+      <button type="button" class="btn" data-action="score" data-points="1">ניחשו קלף אחד — נקודה</button>
+      <button type="button" class="btn secondary" data-action="score" data-points="0">פדיחה מוחלטת — 0</button>
+    </div>
+  </div>
+
+  <!-- ניצחון -->
+  <div class="screen" id="screen-win">
+    <div class="tombstone">
+      <div class="rip">ת.נ.צ.ב.ה</div>
+      <div class="winner-name" id="winner-name"></div>
+      <div class="epitaph">"מתו בעודם עושים את מה שהם הכי אוהבים:<br>לנצח."</div>
+    </div>
+    <div class="flower">🌹 🕯️ 🌹</div>
+    <div class="scorebar" id="final-scorebar" style="margin-top:20px;"></div>
+    <div class="stack-bottom">
+      <button type="button" class="btn" data-action="rematch">עוד סיבוב</button>
+      <button type="button" class="btn secondary" data-action="goto" data-target="screen-home">לתפריט הראשי</button>
+    </div>
+  </div>
+
+</div>
+
+<script>
+/* ============ חפיסות (תוכן מקורי, גרסה למבוגרים) ============ */
+const WHO_CARDS = [
+  "<u>שיכור</u> שמנסה להיראות פיכח מול השוטר",
+  "<u>סטרימר</u> ששכח שהמצלמה עדיין דלוקה",
+  "<u>מדריך יוגה</u> שמסריח מגראס",
+  "<u>חתן</u> ששכח את הטבעת ואת שם הכלה",
+  "<u>איש הייטק</u> ביום השני אחרי הפיטורים",
+  "<u>אינפלואנסרית</u> באמצע קריסה בלייב",
+  "<u>מילואימניק</u> שחזר הביתה אחרי חודשיים",
+  "<u>רופא</u> שגיגל את התסמינים של עצמו",
+  "<u>סוכן ביטוח</u> שמוכר פוליסה לעצמו",
+  "<u>די־ג'יי</u> בחתונה שכל האולם שונא",
+  "<u>שכן</u> שמשפץ בשבע בבוקר בשבת",
+  "<u>נהג מונית</u> עם דעה נחרצת על הכול",
+  "<u>פקידה בביטוח לאומי</u> חמש דקות לפני סגירה",
+  "<u>מאמן כושר</u> שמעשן בהפסקה",
+  "<u>טבח</u> שטועם מכל הסירים עם אותה כף",
+  "<u>ברמן</u> ששפך לעצמו יותר מאשר ללקוחות",
+  "<u>גרוש טרי</u> באפליקציית היכרויות",
+  "<u>סבתא</u> ששואלת מתי כבר מתחתנים",
+  "<u>שדכן</u> שנשאר רווק",
+  "<u>מרצה</u> שאף אחד לא מגיע לשיעור שלו",
+  "<u>שחקן</u> שמככב רק בפרסומות לתרופות",
+  "<u>מטיף למוסר</u> עם היסטוריית חיפושים מפוקפקת",
+  "<u>פוליטיקאי</u> באמצע התנצלות לא כנה",
+  "<u>מאבטח</u> בקניון ששקוע בטלפון",
+  "<u>תייר ישראלי</u> שמתמקח בשוק בתאילנד",
+  "<u>שף</u> במסעדה עם כוכב מישלן ומקק",
+  "<u>אבא טרי</u> שלא ישן שבועיים",
+  "<u>נהג רכבת</u> שפספס תחנה",
+  "<u>ספר</u> שמספר לך את כל סיפור חייו",
+  "<u>מלצר</u> ביום האחרון בעבודה",
+  "<u>עורך דין</u> שמפסיד תיק לעצמו",
+  "<u>זמר חתונות</u> ששוכח את המילים באמצע",
+  "<u>פסיכולוג</u> שדחוף לו פסיכולוג",
+  "<u>מדריך טיולים</u> שאיבד את הקבוצה",
+  "<u>שוטר תנועה</u> שרשם דוח לעצמו",
+  "<u>קוסם</u> בבר מצווה שאף אחד לא מסתכל עליו",
+  "<u>שכנה</u> שמקשיבה דרך הקיר",
+  "<u>מתאגרף</u> שמתעלף למראה דם",
+  "<u>נזיר</u> שנדר שתיקה ומת לרכל",
+  "<u>איש עסקים</u> שמדבר ברמקול ברכבת",
+  "<u>סטודנט</u> בבוקר שאחרי ליל שימורים",
+  "<u>בעל דירה</u> שמודיע על העלאת שכר דירה",
+  "<u>רופא שיניים</u> ששואל שאלות כשהפה שלך פתוח",
+  "<u>מדריך צלילה</u> שלא באמת יודע לשחות",
+  "<u>גנב</u> שהפעיל את האזעקה של עצמו",
+];
+
+/* מנוסחים כשמות פעולה כדי שיתאימו לכל דמות, בלי בעיות זכר/נקבה */
+const HOW_CARDS = [
+  "<u>שרימפס</u> מהמזנון של המלון ביום החמישי",
+  "התחשמלות מ<u>מטען</u> זול מהאלי אקספרס",
+  "בליעה של <u>גרעין אבוקדו</u> באמצע ויכוח",
+  "התקף לב מ<u>חשבון הארנונה</u>",
+  "מוות מבושה אחרי <u>הודעה קולית</u> שנשלחה לאדם הלא נכון",
+  "חנק מ<u>צחוק</u> בהלוויה של מישהו אחר",
+  "ריסוק מתחת ל<u>ארון איקאה</u> שהורכב לא לפי ההוראות",
+  "התייבשות בתור ב<u>משרד הפנים</u>",
+  "נפילה מ<u>קורקינט חשמלי</u> בלי קסדה, כמובן",
+  "התפוצצות אחרי <u>חומוס</u> בשתיים בלילה",
+  "מכת שמש ב<u>ים המלח</u> באוגוסט",
+  "הרעלת <u>סושי</u> מדוכן בתחנה המרכזית",
+  "פגיעה של <u>כדור פורח</u> בדיוק באמצע הצעת נישואין",
+  "דלקת ריאות מ<u>מזגן</u> במשרד",
+  "עקיצה של <u>יתוש</u> אחד — אבל בדיוק שם",
+  "טביעה ב<u>בריכה מתנפחת</u> בעומק ארבעים סנטימטר",
+  "שריפה מ<u>נר</u> ששכחו לכבות",
+  "מוות מ<u>שיעמום</u> בהרצאה על קרנות פנסיה",
+  "היסחפות עם <u>שקית זבל</u> ברוח חזקה — ואיתה כל השאר",
+  "לחץ דם מ<u>קבוצת ווטסאפ משפחתית</u>",
+  "בליעה של <u>עצם דג</u> בליל הסדר",
+  "נפילה לתוך <u>בור ביוב</u> שהעירייה הבטיחה לסגור",
+  "פיצוץ של <u>סיר לחץ</u> עם קובה בפנים",
+  "אלרגיה ל<u>בוטנים</u> שהיו כתובים על האריזה",
+  "דריסה של <u>אופנוע שליחויות</u> על המדרכה",
+  "מכה מ<u>דלת מקרר</u> שנפתחה בהתלהבות יתר",
+  "חנק מ<u>עשן מנגל</u> ביום העצמאות",
+  "התמוטטות של <u>מרפסת</u> באמצע מסיבה",
+  "התחשמלות ב<u>אמבטיה</u> עם הטלפון ביד",
+  "עקיצה של <u>עקרב</u> בשירותים של הצימר",
+  "<u>כדור שינה</u> אחד יותר מדי אחרי מילואים",
+  "נפילה מ<u>סולם</u> בזמן תליית תמונה",
+  "התקף פאניקה מ<u>אזעקה</u> שהתבררה כאזעקת אוטו",
+  "קריעה של <u>שריר</u> בשכיבות סמיכה להרשים מישהי",
+  "בליעה של <u>מסטיק</u> והאמונה שהוא נשאר שבע שנים",
+  "התהפכות של <u>קלנועית</u> בירידה תלולה",
+  "מוות ממבוכה אחרי <u>נאום</u> בחתונה",
+  "הצטננות קטלנית משינה מול <u>מאוורר</u> — סבתא צדקה",
+  "פגיעה מ<u>שער כדורגל</u> שנפל במגרש שכונתי",
+  "טעימה של <u>פטריות</u> מהיער בטיול אחרי צבא",
+  "מעיכה בין <u>דלתות רכבת</u> שנסגרו בדיוק",
+  "נשיכה של <u>כלב</u> ש\"בחיים לא נשך אף אחד\"",
+  "התייבשות ב<u>פסטיבל</u> באמצע המדבר",
+  "פיצוץ של <u>בלון הליום</u> ליד סיגריה דולקת",
+  "החלקה על <u>רצפה רטובה</u> עם שלט \"זהירות, רצפה רטובה\"",
+];
+
+/* ============ מצב המשחק ============ */
+const state = {
+  teamCount: 2, roundTime: 60, target: 10,
+  teams: [], scores: [], currentTeam: 0,
+  whoDeck: [], howDeck: [],
+  currentWho: null, currentHow: null,
+  redrawUsed: false,
+  timerId: null, timeLeft: 0,
+};
+
+const TEAM_NAMES = ["קבוצת השלד", "קבוצת הרוח", "קבוצת הזומבי", "קבוצת המומיה", "קבוצת הערפד"];
+const TEAM_SHORT = ["שלד", "רוח", "זומבי", "מומיה", "ערפד"];
+
+/* ============ מסך ההגדרות ============ */
+function buildChoiceRow(el, options, current, setter) {
+  el.innerHTML = "";
+  options.forEach(opt => {
+    const b = document.createElement("button");
+    b.textContent = opt.label;
+    if (opt.value === current) b.classList.add("selected");
+    b.onclick = () => { setter(opt.value); buildChoiceRow(el, options, opt.value, setter); };
+    el.appendChild(b);
+  });
+}
+function initSetup() {
+  buildChoiceRow(document.getElementById("team-count-row"),
+    [{label:"2",value:2},{label:"3",value:3},{label:"4",value:4}],
+    state.teamCount, v => state.teamCount = v);
+  buildChoiceRow(document.getElementById("time-row"),
+    [{label:"45 שנ'",value:45},{label:"60 שנ'",value:60},{label:"90 שנ'",value:90}],
+    state.roundTime, v => state.roundTime = v);
+  buildChoiceRow(document.getElementById("target-row"),
+    [{label:"5",value:5},{label:"10",value:10},{label:"15",value:15}],
+    state.target, v => state.target = v);
+}
+
+/* ============ מהלך המשחק ============ */
+function goto(id) {
+  document.querySelectorAll(".screen").forEach(s => s.classList.remove("active"));
+  document.getElementById(id).classList.add("active");
+}
+
+function shuffle(arr) {
+  const a = arr.slice();
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+function startGame() {
+  state.teams = TEAM_NAMES.slice(0, state.teamCount);
+  state.scores = new Array(state.teamCount).fill(0);
+  state.currentTeam = 0;
+  state.whoDeck = shuffle(WHO_CARDS);
+  state.howDeck = shuffle(HOW_CARDS);
+  showTurn();
+}
+
+function restartSameTeams() {
+  state.scores = new Array(state.teamCount).fill(0);
+  state.currentTeam = 0;
+  state.whoDeck = shuffle(WHO_CARDS);
+  state.howDeck = shuffle(HOW_CARDS);
+  showTurn();
+}
+
+function renderScorebar(el, highlightCurrent) {
+  el.innerHTML = "";
+  state.teams.forEach((t, i) => {
+    const chip = document.createElement("span");
+    chip.className = "chip" + (highlightCurrent && i === state.currentTeam ? " current" : "");
+    chip.textContent = `${TEAM_SHORT[i]} · ${state.scores[i]}`;
+    el.appendChild(chip);
+  });
+}
+
+function showTurn() {
+  document.getElementById("turn-team-name").textContent = state.teams[state.currentTeam];
+  renderScorebar(document.getElementById("turn-scorebar"), true);
+  goto("screen-turn");
+}
+
+function drawCards() {
+  if (state.whoDeck.length === 0) state.whoDeck = shuffle(WHO_CARDS);
+  if (state.howDeck.length === 0) state.howDeck = shuffle(HOW_CARDS);
+  state.currentWho = state.whoDeck.pop();
+  state.currentHow = state.howDeck.pop();
+  document.getElementById("who-text").innerHTML = state.currentWho;
+  document.getElementById("how-text").innerHTML = state.currentHow;
+}
+
+function redrawBtn() { return document.querySelector("#screen-cards .btn.ghost"); }
+
+function revealCards() {
+  state.redrawUsed = false;
+  const rb = redrawBtn();
+  rb.textContent = "קשה מדי — קלפים חדשים (פעם אחת)";
+  rb.style.opacity = "";
+  drawCards();
+  goto("screen-cards");
+}
+
+function redraw() {
+  if (state.redrawUsed) return;
+  state.redrawUsed = true;
+  drawCards();
+  const rb = redrawBtn();
+  rb.textContent = "כבר החלפתם קלפים!";
+  rb.style.opacity = ".35";
+}
+
+function startActing() {
+  document.getElementById("acting-team-label").textContent = state.teams[state.currentTeam] + " — קדימה!";
+  state.timeLeft = state.roundTime;
+  updateTimerUI();
+  goto("screen-acting");
+  clearInterval(state.timerId);
+  state.timerId = setInterval(tick, 1000);
+}
+
+function tick() {
+  state.timeLeft--;
+  if (state.timeLeft <= 0) {
+    state.timeLeft = 0;
+    clearInterval(state.timerId);
+    try { navigator.vibrate && navigator.vibrate([200,100,200]); } catch(e){}
+  }
+  updateTimerUI();
+}
+
+function updateTimerUI() {
+  const d = document.getElementById("timer-display");
+  d.textContent = state.timeLeft;
+  d.classList.toggle("low", state.timeLeft <= 10);
+  const pct = (state.timeLeft / state.roundTime) * 100;
+  const bar = document.getElementById("timer-bar");
+  bar.style.width = pct + "%";
+  bar.style.background = state.timeLeft <= 10 ? "var(--red)" : state.timeLeft <= state.roundTime/2 ? "var(--gold)" : "var(--green)";
+}
+
+function scoreTurn(points) {
+  clearInterval(state.timerId);
+  state.scores[state.currentTeam] += points;
+  if (state.scores[state.currentTeam] >= state.target) {
+    showWin();
+    return;
+  }
+  state.currentTeam = (state.currentTeam + 1) % state.teamCount;
+  showTurn();
+}
+
+function showWin() {
+  document.getElementById("winner-name").textContent = state.teams[state.currentTeam];
+  renderScorebar(document.getElementById("final-scorebar"), false);
+  goto("screen-win");
+  throwConfetti();
+}
+
+function throwConfetti() {
+  const app = document.getElementById("app");
+  const bits = ["🪦","💀","🌹","⚰️","✨","🎉","🕯️"];
+  for (let i = 0; i < 40; i++) {
+    const s = document.createElement("span");
+    s.className = "confetti";
+    s.textContent = bits[Math.floor(Math.random() * bits.length)];
+    s.style.left = Math.random() * 95 + "%";
+    s.style.animationDuration = (2 + Math.random() * 3) + "s";
+    s.style.animationDelay = (Math.random() * 1.5) + "s";
+    app.appendChild(s);
+    setTimeout(() => s.remove(), 7000);
+  }
+}
+
+/* ============ האזנה ללחיצות ============ */
+const ACTIONS = {
+  "goto": btn => goto(btn.dataset.target),
+  "start-game": () => startGame(),
+  "reveal": () => revealCards(),
+  "start-acting": () => startActing(),
+  "redraw": () => redraw(),
+  "score": btn => scoreTurn(parseInt(btn.dataset.points, 10)),
+  "rematch": () => restartSameTeams(),
+};
+document.addEventListener("click", e => {
+  const btn = e.target.closest("[data-action]");
+  if (!btn) return;
+  e.preventDefault();
+  const fn = ACTIONS[btn.dataset.action];
+  if (fn) fn(btn);
+}, { passive: false });
+
+initSetup();
+</script>
+</body>
+</html>
